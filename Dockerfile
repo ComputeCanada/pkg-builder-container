@@ -6,3 +6,6 @@ RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get -y install ruby ruby-dev rubygems build-essential rpm less git
 RUN gem install --no-document fpm
+
+# copy helpers into place
+COPY src/rpm-changelog-cleanup /usr/local/bin

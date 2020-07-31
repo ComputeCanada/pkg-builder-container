@@ -1,0 +1,123 @@
+#!/bin/bash
+ #
+ # Formats input text to be used in an RPM changelog:
+ # * Make lines a bulleted list: first line is first bullet, subsequent lines
+ #   are either continuations, sublists, or the next item
+ # * Removes blank lines
+ # * Converts '*' to '-'
+
+clean()
+{
+  sed -n '
+  1 s/.*/- &/
+  s/^* /  - /
+  /^[[:space:]]*$/ {
+    :deleteblank
+    # bring next line into pattern space
+    n
+    # if blank, start again
+    /^[[:space:]]*$/ b deleteblank
+    # if starts with '-', done
+    /^- / b done
+    # for anything else, add '-' at beginning
+    s/.*/- &/
+    :done
+  }
+  /^[[:space:]]*- /! s/^/  &/
+  p
+  '
+}
+
+expected()
+{
+  echo "Expected:\n----\n$1\n----\nReceived:\n----\n$2\n----" >&2
+  return 1
+}
+
+fail()
+{
+  echo "$@" >&2
+  exit 1
+}
+
+test1()
+{
+  expected="- Did the thing
+  - which involved this
+  - and this"
+
+  res=`cat <<EOF | clean
+Did the thing
+* which involved this
+* and this
+EOF
+`
+
+  test "$res" == "$expected" || {
+    expected "$expected" "$res"
+  }
+}
+
+test2()
+{
+  expected="- Merge branch 'that-thing' into 'main'
+  - that was the thing
+- There was this other thing
+  this is a continuation of that line
+- See merge request dingbatz/whateverness!6"
+
+  res=`cat <<EOF | clean
+Merge branch 'that-thing' into 'main'
+* that was the thing
+
+There was this other thing
+this is a continuation of that line
+
+
+See merge request dingbatz/whateverness!6
+EOF
+`
+
+  test "$res" == "$expected" || {
+    expected "$res"
+  }
+}
+
+usage="
+Usage: rpm-changelog-cleanup -t
+       rpm-changelog-cleanup [-sN]
+
+Reads text from stdin and expresses to stdout in a format friendly to RPM
+changelogs.  If '-sN' is specified, echoes first N lines without filtering.
+If N is empty or a non-integer, script will fail, and not gracefully.
+
+If '-t' is used, runs (in-script) tests against filter.
+"
+
+while [ -n "$1" ]
+do
+  case "$1" in
+    -s*)
+      N=${1#-s}
+      i=0
+      while [ "$i" -lt "$N" ]
+      do
+        read line
+        echo "$line"
+        i=$((i+1))
+      done
+      ;;
+    -t)
+      test1 || fail "Test1 failed"
+      test2 || fail "Test2 failed"
+      exit
+      ;;
+    *)
+      echo "Not recognized: $1" 2>&1
+      echo "$usage" 2>&1
+      exit 1
+      ;;
+  esac
+  shift
+done
+clean
