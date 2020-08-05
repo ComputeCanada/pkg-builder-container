@@ -6,81 +6,26 @@
  # * Removes blank lines
  # * Converts '*' to '-'
 
+
 clean()
 {
-  sed -n '
-  1 s/.*/- &/
-  s/^* /  - /
-  /^[[:space:]]*$/ {
-    :deleteblank
-    # bring next line into pattern space
+  sed '
+  :start
+  /^[[:space:]]*$/ d
+  /^\*/ {
+    s/^\*[[:space:]]*/  - /
+    b
+  }
+  /^-/! {
+    s/^/- /
     n
-    # if blank, start again
-    /^[[:space:]]*$/ b deleteblank
-    # if starts with '-', done
-    /^- / b done
-    # for anything else, add '-' at beginning
-    s/.*/- &/
-    :done
+    /^[[:space:]]*$/ {
+      b start
+    }
+    s/^/  /
+    s/\([[:space:]]*\)\*/\1-/
   }
-  /^[[:space:]]*- /! s/^/  &/
-  p
   '
-}
-
-expected()
-{
-  echo "Expected:\n----\n$1\n----\nReceived:\n----\n$2\n----" >&2
-  return 1
-}
-
-fail()
-{
-  echo "$@" >&2
-  exit 1
-}
-
-test1()
-{
-  expected="- Did the thing
-  - which involved this
-  - and this"
-
-  res=`cat <<EOF | clean
-Did the thing
-* which involved this
-* and this
-EOF
-`
-
-  test "$res" == "$expected" || {
-    expected "$expected" "$res"
-  }
-}
-
-test2()
-{
-  expected="- Merge branch 'that-thing' into 'main'
-  - that was the thing
-- There was this other thing
-  this is a continuation of that line
-- See merge request dingbatz/whateverness!6"
-
-  res=`cat <<EOF | clean
-Merge branch 'that-thing' into 'main'
-* that was the thing
-
-There was this other thing
-this is a continuation of that line
-
-
-See merge request dingbatz/whateverness!6
-EOF
-`
-
-  test "$res" == "$expected" || {
-    expected "$res"
-  }
 }
 
 usage="
@@ -94,6 +39,7 @@ If N is empty or a non-integer, script will fail, and not gracefully.
 If '-t' is used, runs (in-script) tests against filter.
 "
 
+cleaning=1
 while [ -n "$1" ]
 do
   case "$1" in
@@ -108,9 +54,7 @@ do
       done
       ;;
     -t)
-      test1 || fail "Test1 failed"
-      test2 || fail "Test2 failed"
-      exit
+      cleaning=0
       ;;
     *)
       echo "Not recognized: $1" 2>&1
@@ -120,4 +64,71 @@ do
   esac
   shift
 done
-clean
+
+if ((cleaning))
+then
+  clean
+  exit
+fi
+
+expected()
+{
+  echo -e "For:\n----\n$1\n-----\nExpected:\n----\n$2\n----\nReceived:\n----\n$3\n----" >&2
+  return 1
+}
+
+fail()
+{
+  echo "$@" >&2
+  exit 1
+}
+
+tests=(
+# test 1 source
+"Did the thing
+* which involved this
+* and this"
+
+# test 1 expected
+"- Did the thing
+  - which involved this
+  - and this"
+
+# test 2 source
+"Merge branch 'that-thing' into 'main'
+* that was the thing
+
+There was this other thing
+this is a continuation of that line
+
+
+See merge request dingbatz/whateverness!6"
+
+# test 2 expected
+"- Merge branch 'that-thing' into 'main'
+  - that was the thing
+- There was this other thing
+  this is a continuation of that line
+- See merge request dingbatz/whateverness!6"
+
+# test 3 source
+"Merge branch 'that-thing' into 'main'
+
+* That was the thing"
+
+# test 3 expected
+"- Merge branch 'that-thing' into 'main'
+  - That was the thing"
+)
+
+let rc=0
+for ((i=0; i<${#tests[@]}; i+=2))
+do
+  res=`echo "${tests[$i]}" | clean`
+  expected=${tests[((i+1))]}
+  test "$res" == "$expected" || {
+    expected "${tests[$i]}" "$expected" "$res"
+    let rc=1
+  }
+done
+exit $rc
