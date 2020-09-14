@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:bionic
 MAINTAINER Drew Leske <drew.leske@computecanada.ca>
 
 ENV DEBIAN_FRONTEND=noninteractive
